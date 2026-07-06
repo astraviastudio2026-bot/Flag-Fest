@@ -1,18 +1,65 @@
 "use client";
 
-import { useActionState } from "react";
-import { login, type LoginState } from "@/app/login/actions";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ActionButton } from "./ActionButton";
 import { AlertIcon, ArrowRightIcon, LockIcon, MailIcon } from "./icons";
 
-const initialState: LoginState = { error: null };
-
-/** Formulario de inicio de sesión conectado a Supabase Auth. */
+/**
+ * Formulario de inicio de sesión conectado a Supabase Auth.
+ *
+ * Envía las credenciales a `POST /api/auth/login` (Route Handler), que
+ * abre la sesión y responde con la ruta de inicio según el rol. Evita el
+ * uso de Server Actions, que provocaba "Invalid Server Actions request".
+ */
 export function LoginForm() {
-  const [state, formAction, pending] = useActionState(login, initialState);
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+
+    const formData = new FormData(event.currentTarget);
+    const identifier = String(formData.get("identifier") ?? "");
+    const password = String(formData.get("password") ?? "");
+
+    setPending(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | { redirectTo?: string; error?: string }
+        | null;
+
+      if (!res.ok || !data?.redirectTo) {
+        setError(
+          data?.error ??
+            "No se pudo iniciar sesión. Inténtalo de nuevo.",
+        );
+        setPending(false);
+        return;
+      }
+
+      // Sesión iniciada: navegar a la página de inicio del rol.
+      // Mantenemos `pending` activo durante la transición.
+      router.push(data.redirectTo);
+      router.refresh();
+    } catch {
+      setError("No se pudo conectar con el servidor. Revisa tu conexión.");
+      setPending(false);
+    }
+  }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
         <span className="font-condensed text-xs uppercase tracking-wider text-muted">
           Usuario o correo interno
@@ -58,13 +105,13 @@ export function LoginForm() {
         </div>
       </label>
 
-      {state.error && (
+      {error && (
         <div
           role="alert"
           className="flex items-start gap-2 rounded-xl border border-flag-red/30 bg-flag-red/10 px-3.5 py-3 text-sm text-flag-red-glow"
         >
           <AlertIcon size={18} className="mt-0.5 shrink-0" />
-          <span>{state.error}</span>
+          <span>{error}</span>
         </div>
       )}
 

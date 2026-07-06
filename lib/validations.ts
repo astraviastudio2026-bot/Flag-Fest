@@ -5,6 +5,19 @@
 import { z } from "zod";
 import { TICKET_COLORS } from "./constants";
 
+export const loginSchema = z.object({
+  // Usuario interno ("admin") o correo interno completo
+  // ("admin@flagfest.local"). Se normaliza en el servidor.
+  identifier: z
+    .string({ message: "Introduce tu usuario o correo interno." })
+    .trim()
+    .min(1, "Introduce tu usuario o correo interno."),
+  password: z
+    .string({ message: "Introduce tu contraseña." })
+    .min(1, "Introduce tu contraseña."),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
 export const createUserSchema = z.object({
   full_name: z
     .string()
