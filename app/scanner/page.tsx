@@ -21,7 +21,7 @@ export default async function ScannerPage() {
       <Header
         title="Escáner QR"
         subtitle="Valida las entradas en la puerta del evento."
-        badge={<StatusBadge status="pending">Modo demo</StatusBadge>}
+        badge={<StatusBadge status="valid">Validación en vivo</StatusBadge>}
         user={{
           full_name: profile.full_name,
           username: profile.username,

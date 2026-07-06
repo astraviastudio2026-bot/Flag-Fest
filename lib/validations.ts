@@ -168,3 +168,25 @@ export const createTicketSchema = z.object({
     .or(z.literal("")),
 });
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+
+/** Valor escaneado por el lector QR (fase 4). */
+export const validateScanSchema = z.object({
+  scannedValue: z
+    .string({ message: "Falta el valor escaneado." })
+    .trim()
+    .min(1, "Falta el valor escaneado.")
+    .max(2000, "El valor escaneado es demasiado largo."),
+  // Origen del intento, para el rastro en ticket_validations.
+  source: z.enum(["scanner", "link"]).optional(),
+});
+export type ValidateScanInput = z.infer<typeof validateScanSchema>;
+
+/** Código corto escrito a mano para validación manual (fase 4). */
+export const validateCodeSchema = z.object({
+  code: z
+    .string({ message: "Introduce el código de la entrada." })
+    .trim()
+    .min(1, "Introduce el código de la entrada.")
+    .max(20, "El código es demasiado largo."),
+});
+export type ValidateCodeInput = z.infer<typeof validateCodeSchema>;

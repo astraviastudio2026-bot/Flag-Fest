@@ -291,6 +291,83 @@ export async function getRecentTickets(
   }));
 }
 
+/** Validación reciente enriquecida para el panel admin (fase 4). */
+export interface ValidationRow {
+  id: string;
+  scanned_at: string;
+  result: string;
+  message: string;
+  validator_name: string | null;
+  ticket_short_code: string | null;
+  ticket_customer: string | null;
+}
+
+/** Últimas validaciones de entrada (RLS: solo el admin las ve todas). */
+export async function getRecentValidations(limit = 10): Promise<ValidationRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ticket_validations")
+    .select("id, ticket_id, validator_id, result, message, scanned_at")
+    .order("scanned_at", { ascending: false })
+    .limit(limit);
+
+  const rows = (data ?? []) as {
+    id: string;
+    ticket_id: string | null;
+    validator_id: string | null;
+    result: string;
+    message: string;
+    scanned_at: string;
+  }[];
+  if (rows.length === 0) return [];
+
+  const ticketIds = [...new Set(rows.map((r) => r.ticket_id).filter(Boolean))] as string[];
+  const validatorIds = [
+    ...new Set(rows.map((r) => r.validator_id).filter(Boolean)),
+  ] as string[];
+
+  const [{ data: tickets }, { data: validators }] = await Promise.all([
+    ticketIds.length
+      ? supabase
+          .from("tickets")
+          .select("id, short_code, customer_name")
+          .in("id", ticketIds)
+      : Promise.resolve({
+          data: [] as { id: string; short_code: string | null; customer_name: string }[],
+        }),
+    validatorIds.length
+      ? supabase.from("profiles").select("id, full_name").in("id", validatorIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+  ]);
+
+  const ticketById = new Map(
+    ((tickets ?? []) as { id: string; short_code: string | null; customer_name: string }[]).map(
+      (t) => [t.id, t],
+    ),
+  );
+  const validatorById = new Map(
+    ((validators ?? []) as { id: string; full_name: string }[]).map((v) => [
+      v.id,
+      v.full_name,
+    ]),
+  );
+
+  return rows.map((r) => {
+    const t = r.ticket_id ? ticketById.get(r.ticket_id) : undefined;
+    return {
+      id: r.id,
+      scanned_at: r.scanned_at,
+      result: r.result,
+      message: r.message,
+      validator_name: r.validator_id
+        ? validatorById.get(r.validator_id) ?? null
+        : null,
+      ticket_short_code: t?.short_code ?? null,
+      ticket_customer: t?.customer_name ?? null,
+    };
+  });
+}
+
 /** Datos del panel de un vendedor concreto para el evento activo. */
 export async function getSellerDashboard(sellerId: string) {
   const event = await getActiveEvent();

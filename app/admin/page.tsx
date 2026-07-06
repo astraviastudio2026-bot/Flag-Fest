@@ -25,6 +25,7 @@ import {
   getEventTickets,
   getManageableUsers,
   getPhases,
+  getRecentValidations,
   getSellers,
   pickCurrentPhase,
 } from "@/lib/data";
@@ -83,14 +84,16 @@ export default async function AdminPage() {
     );
   }
 
-  const [stats, phases, users, sellers, allocations, tickets] = await Promise.all([
-    getEventStats(event),
-    getPhases(event.id),
-    getManageableUsers(),
-    getSellers(),
-    getAllocations(event.id),
-    getEventTickets(event.id),
-  ]);
+  const [stats, phases, users, sellers, allocations, tickets, validations] =
+    await Promise.all([
+      getEventStats(event),
+      getPhases(event.id),
+      getManageableUsers(),
+      getSellers(),
+      getAllocations(event.id),
+      getEventTickets(event.id),
+      getRecentValidations(10),
+    ]);
 
   const currentPhase = pickCurrentPhase(phases);
   const nextOrder = phases.length
@@ -286,6 +289,82 @@ export default async function AdminPage() {
           <TicketsTable tickets={tickets} showSeller />
         )}
       </DashboardCard>
+
+      {/* Últimas validaciones en puerta */}
+      <DashboardCard
+        title="Últimas validaciones"
+        subtitle="Escaneos registrados por el personal en la puerta."
+        className="mt-6"
+        bodyClassName="p-0"
+      >
+        {validations.length === 0 ? (
+          <div className="p-5">
+            <EmptyState
+              title="Aún no hay validaciones"
+              description="Cuando el personal escanee entradas en la puerta, los intentos aparecerán aquí."
+              icon={<QrIcon size={26} />}
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-2">
+                  <th className="px-4 py-3 font-condensed font-medium">Hora</th>
+                  <th className="px-4 py-3 font-condensed font-medium">Código</th>
+                  <th className="px-4 py-3 font-condensed font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-condensed font-medium">Validador</th>
+                  <th className="px-4 py-3 font-condensed font-medium">Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {validations.map((v) => (
+                  <tr key={v.id} className="border-b border-border/60 last:border-0">
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-2">
+                      {formatScanTime(v.scanned_at)}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      {v.ticket_short_code ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {v.ticket_customer ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {v.validator_name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={VALIDATION_BADGE[v.result] ?? "invalid"} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </DashboardCard>
     </AppShell>
   );
+}
+
+/** Resultado de ticket_validations → variante visual del StatusBadge. */
+const VALIDATION_BADGE: Record<
+  string,
+  "valid" | "used" | "void" | "invalid"
+> = {
+  valid: "valid",
+  already_used: "used",
+  cancelled: "void",
+  invalid: "invalid",
+};
+
+/** Timestamp del escaneo → fecha y hora locales de Ecuador. */
+function formatScanTime(iso: string): string {
+  return new Intl.DateTimeFormat("es-EC", {
+    timeZone: "America/Guayaquil",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(iso));
 }
