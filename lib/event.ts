@@ -1,9 +1,9 @@
 /**
  * Datos y constantes del evento Flag-Fest.
  *
- * En esta primera fase son valores estáticos de maqueta. En la
- * siguiente fase estos datos provendrán de Supabase (tablas de
- * evento, fases, cupos y entradas), manteniendo estas mismas formas.
+ * Constantes visuales de la marca (colores de bandera, textos del hero).
+ * Los datos operativos del evento (fases, cupos, entradas) viven en
+ * Supabase; aquí solo queda lo puramente presentacional.
  */
 
 export const EVENT = {
