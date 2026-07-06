@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ActionButton } from "./ActionButton";
+import { signOut } from "@/lib/auth";
 import { LogOutIcon } from "./icons";
 
 /** Cabecera de página dentro del AppShell. */
@@ -27,15 +27,16 @@ export function Header({
       </div>
       <div className="flex items-center gap-2">
         {actions}
-        {/* Cierre de sesión (maqueta — sin lógica todavía) */}
-        <ActionButton
-          href="/login"
-          variant="ghost"
-          size="sm"
-          icon={<LogOutIcon size={16} />}
-        >
-          Salir
-        </ActionButton>
+        {/* Cierre de sesión real vía Supabase Auth */}
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-transparent px-3.5 font-condensed text-sm font-semibold uppercase tracking-wide text-muted transition-all duration-200 hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <LogOutIcon size={16} />
+            <span>Salir</span>
+          </button>
+        </form>
       </div>
     </header>
   );
