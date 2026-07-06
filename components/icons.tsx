@@ -45,6 +45,16 @@ export function TicketIcon({ size, className, strokeWidth }: IconProps) {
   );
 }
 
+export function DownloadIcon({ size, className, strokeWidth }: IconProps) {
+  return (
+    <svg {...base(size, strokeWidth)} className={className} aria-hidden>
+      <path d="M12 3v12" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
 export function QrIcon({ size, className, strokeWidth }: IconProps) {
   return (
     <svg {...base(size, strokeWidth)} className={className} aria-hidden>

@@ -4,7 +4,8 @@ import { DashboardCard } from "@/components/DashboardCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Header } from "@/components/Header";
 import { StatCard } from "@/components/StatCard";
-import { StatusBadge, type TicketStatus as BadgeStatus } from "@/components/StatusBadge";
+import { StatusBadge } from "@/components/StatusBadge";
+import { TicketsTable } from "@/components/TicketsTable";
 import { EventForm } from "@/components/admin/EventForm";
 import { PhaseForm } from "@/components/admin/PhaseForm";
 import { AllocationForm } from "@/components/admin/AllocationForm";
@@ -21,14 +22,13 @@ import {
   getActiveEvent,
   getAllocations,
   getEventStats,
+  getEventTickets,
   getManageableUsers,
   getPhases,
-  getRecentTickets,
   getSellers,
   pickCurrentPhase,
 } from "@/lib/data";
-import { formatCurrency, formatDate, getFlagColor } from "@/lib/event";
-import type { TicketStatus, TicketColor } from "@/lib/types";
+import { formatCurrency, formatDate } from "@/lib/event";
 
 export const metadata: Metadata = {
   title: "Panel de administración · Flag-Fest",
@@ -36,12 +36,6 @@ export const metadata: Metadata = {
 
 // Panel autenticado por usuario: siempre dinámico, nunca estático.
 export const dynamic = "force-dynamic";
-
-const STATUS_BADGE: Record<TicketStatus, { badge: BadgeStatus; label: string }> = {
-  sold: { badge: "valid", label: "Vendida" },
-  used: { badge: "used", label: "Usada" },
-  cancelled: { badge: "void", label: "Anulada" },
-};
 
 export default async function AdminPage() {
   const profile = await requireRole(["admin"]);
@@ -89,13 +83,13 @@ export default async function AdminPage() {
     );
   }
 
-  const [stats, phases, users, sellers, allocations, recent] = await Promise.all([
+  const [stats, phases, users, sellers, allocations, tickets] = await Promise.all([
     getEventStats(event),
     getPhases(event.id),
     getManageableUsers(),
     getSellers(),
     getAllocations(event.id),
-    getRecentTickets(event.id, 6),
+    getEventTickets(event.id),
   ]);
 
   const currentPhase = pickCurrentPhase(phases);
@@ -273,14 +267,14 @@ export default async function AdminPage() {
         </div>
       </DashboardCard>
 
-      {/* Ventas recientes reales */}
+      {/* Ventas reales */}
       <DashboardCard
-        title="Ventas recientes"
-        subtitle="Últimas entradas generadas por los vendedores."
+        title="Ventas"
+        subtitle="Todas las entradas generadas. Descarga el PDF o reenvía el correo."
         className="mt-6"
         bodyClassName="p-0"
       >
-        {recent.length === 0 ? (
+        {tickets.length === 0 ? (
           <div className="p-5">
             <EmptyState
               title="Aún no hay ventas"
@@ -289,47 +283,7 @@ export default async function AdminPage() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-2">
-                  <th className="px-5 py-3 font-condensed font-medium">Cliente</th>
-                  <th className="px-5 py-3 font-condensed font-medium">Vendedor</th>
-                  <th className="px-5 py-3 font-condensed font-medium">Color</th>
-                  <th className="px-5 py-3 font-condensed font-medium">Monto</th>
-                  <th className="px-5 py-3 font-condensed font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((t) => {
-                  const c = getFlagColor(t.selected_color as TicketColor);
-                  const st = STATUS_BADGE[t.status];
-                  return (
-                    <tr
-                      key={t.id}
-                      className="border-b border-border/60 last:border-0 hover:bg-surface-2/50"
-                    >
-                      <td className="px-5 py-3 font-medium text-foreground">{t.customer_name}</td>
-                      <td className="px-5 py-3 text-muted">{t.seller?.full_name ?? "—"}</td>
-                      <td className="px-5 py-3">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ background: c.hex, boxShadow: `0 0 8px ${c.hex}` }}
-                          />
-                          {c.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-foreground">{formatCurrency(Number(t.price))}</td>
-                      <td className="px-5 py-3">
-                        <StatusBadge status={st.badge}>{st.label}</StatusBadge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <TicketsTable tickets={tickets} showSeller />
         )}
       </DashboardCard>
     </AppShell>

@@ -72,6 +72,16 @@ export interface Ticket {
   price: number;
   status: TicketStatus;
   pdf_url: string | null;
+  /** Código corto legible (p. ej. "FF-0001"). Fase 3. */
+  short_code: string | null;
+  /** Ruta del PDF en el bucket privado `tickets`. Fase 3. */
+  pdf_storage_path: string | null;
+  /** Seguimiento del envío del correo. Fase 3. */
+  email_sent_at: string | null;
+  email_last_error: string | null;
+  resend_email_id: string | null;
+  /** Observación interna de la venta. Fase 3. */
+  notes: string | null;
   sold_at: string;
   used_at: string | null;
   validated_by: string | null;

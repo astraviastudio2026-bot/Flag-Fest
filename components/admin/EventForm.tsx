@@ -1,21 +1,62 @@
 "use client";
 
-import { useActionState } from "react";
-import { saveEvent } from "@/app/admin/actions";
-import { idleActionState } from "@/app/admin/action-state";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { ActionButton } from "@/components/ActionButton";
 import { SettingsIcon } from "@/components/icons";
 import { FormMessage, fieldInput, fieldLabel } from "./FormMessage";
 import type { Event } from "@/lib/types";
 
-/** Crea o edita el evento. Si recibe `event`, precarga sus datos. */
+type Result = { ok?: boolean; error?: string | null; message?: string };
+
+/**
+ * Crea o edita el evento vía `POST /api/admin/events/upsert`.
+ * Si recibe `event`, precarga sus datos y envía su `id` para editar el
+ * evento activo (sin duplicar). Usa fetch en lugar de Server Actions.
+ */
 export function EventForm({ event }: { event?: Event | null }) {
-  const [state, formAction, pending] = useActionState(saveEvent, idleActionState);
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<Result>({});
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPending(true);
+    setResult({});
+
+    const fd = new FormData(e.currentTarget);
+    const payload = {
+      id: event?.id ?? undefined,
+      name: String(fd.get("name") ?? ""),
+      location: String(fd.get("location") ?? ""),
+      event_date: String(fd.get("event_date") ?? ""),
+      total_tickets: Number(fd.get("total_tickets") ?? 0),
+      is_active: fd.get("is_active") != null,
+    };
+
+    try {
+      const res = await fetch("/api/admin/events/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => null)) as Result | null;
+
+      if (!res.ok || !data?.ok) {
+        setResult({ error: data?.error ?? "No se pudo guardar el evento." });
+      } else {
+        setResult({ ok: true, message: data.message ?? "Evento guardado." });
+        router.refresh();
+      }
+    } catch {
+      setResult({ error: "Error de red. Inténtalo de nuevo." });
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      {event && <input type="hidden" name="id" value={event.id} />}
-
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
         <span className={fieldLabel}>Nombre del evento</span>
         <input
@@ -72,7 +113,7 @@ export function EventForm({ event }: { event?: Event | null }) {
         </label>
       </div>
 
-      <FormMessage ok={state.ok} error={state.error} message={state.message} />
+      <FormMessage ok={result.ok} error={result.error} message={result.message} />
 
       <ActionButton
         type="submit"

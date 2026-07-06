@@ -141,3 +141,30 @@ export type AllocationInput = z.infer<typeof allocationSchema>;
 export const ticketColorSchema = z.enum(
   TICKET_COLORS as [string, ...string[]],
 );
+
+/**
+ * Datos del cliente para crear una entrada real (fase 3).
+ * El precio, la fase y el vendedor los determina el servidor.
+ */
+export const createTicketSchema = z.object({
+  customer_name: z
+    .string()
+    .trim()
+    .min(3, "El nombre del cliente debe tener al menos 3 caracteres.")
+    .max(120, "El nombre del cliente es demasiado largo."),
+  customer_email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Introduce un correo del cliente válido."),
+  selected_color: z.enum(["verde", "rojo", "amarillo"], {
+    message: "Selecciona un color válido.",
+  }),
+  notes: z
+    .string()
+    .trim()
+    .max(500, "La observación no puede superar los 500 caracteres.")
+    .optional()
+    .or(z.literal("")),
+});
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;

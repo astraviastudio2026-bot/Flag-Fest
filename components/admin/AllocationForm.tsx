@@ -1,14 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
-import { saveAllocation } from "@/app/admin/actions";
-import { idleActionState } from "@/app/admin/action-state";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { ActionButton } from "@/components/ActionButton";
 import { PlusIcon } from "@/components/icons";
 import { FormMessage, fieldInput, fieldLabel } from "./FormMessage";
 import type { Profile } from "@/lib/types";
 
-/** Asigna un cupo de entradas a un vendedor. */
+type Result = { ok?: boolean; error?: string | null; message?: string };
+
+/** Asigna un cupo de entradas a un vendedor vía API route. */
 export function AllocationForm({
   eventId,
   sellers,
@@ -16,10 +17,43 @@ export function AllocationForm({
   eventId: string;
   sellers: Pick<Profile, "id" | "full_name" | "email">[];
 }) {
-  const [state, formAction, pending] = useActionState(
-    saveAllocation,
-    idleActionState,
-  );
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<Result>({});
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPending(true);
+    setResult({});
+
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const payload = {
+      event_id: eventId,
+      seller_id: String(fd.get("seller_id") ?? ""),
+      allocated_quantity: Number(fd.get("allocated_quantity") ?? 0),
+    };
+
+    try {
+      const res = await fetch("/api/admin/allocations/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => null)) as Result | null;
+
+      if (!res.ok || !data?.ok) {
+        setResult({ error: data?.error ?? "No se pudo asignar el cupo." });
+      } else {
+        setResult({ ok: true, message: data.message ?? "Cupo asignado." });
+        router.refresh();
+      }
+    } catch {
+      setResult({ error: "Error de red. Inténtalo de nuevo." });
+    } finally {
+      setPending(false);
+    }
+  }
 
   if (sellers.length === 0) {
     return (
@@ -31,9 +65,7 @@ export function AllocationForm({
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <input type="hidden" name="event_id" value={eventId} />
-
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className={fieldLabel}>Vendedor</span>
@@ -58,7 +90,7 @@ export function AllocationForm({
         </label>
       </div>
 
-      <FormMessage ok={state.ok} error={state.error} message={state.message} />
+      <FormMessage ok={result.ok} error={result.error} message={result.message} />
 
       <ActionButton
         type="submit"

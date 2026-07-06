@@ -3,7 +3,8 @@ import { AppShell } from "@/components/AppShell";
 import { DashboardCard } from "@/components/DashboardCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Header } from "@/components/Header";
-import { SellForm } from "@/components/SellForm";
+import { SellTicketForm } from "@/components/SellTicketForm";
+import { TicketsTable } from "@/components/TicketsTable";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -28,8 +29,27 @@ export const dynamic = "force-dynamic";
 
 export default async function SellerPage() {
   const profile = await requireRole(["seller", "admin"]);
-  const { event, allocation, sold, phase } = await getSellerDashboard(profile.id);
+  const { event, allocation, sold, phase, sellablePhase, tickets } =
+    await getSellerDashboard(profile.id);
   const navRole = navRoleForDbRole(profile.role);
+  const isAdmin = profile.role === "admin";
+
+  // El precio y la fase vigente se toman de la fase realmente vendible.
+  const currentPhase = sellablePhase ?? phase;
+  const remaining = allocation
+    ? Math.max(0, allocation.allocated_quantity - sold)
+    : null;
+
+  // Motivo por el que el formulario queda deshabilitado, si aplica.
+  let disabledReason: string | null = null;
+  if (!sellablePhase) {
+    disabledReason = "No hay una fase de venta activa para la fecha actual.";
+  } else if (!isAdmin && (remaining ?? 0) <= 0) {
+    disabledReason = "No tienes entradas disponibles.";
+  }
+
+  // El vendedor sin cupo no puede vender; el admin sí (venta administrativa).
+  const noAllocationBlock = !allocation && !isAdmin;
 
   return (
     <AppShell role={navRole}>
@@ -81,7 +101,7 @@ export default async function SellerPage() {
             icon={<SettingsIcon size={26} />}
           />
         </div>
-      ) : !allocation ? (
+      ) : noAllocationBlock ? (
         <div className="mt-6">
           <EmptyState
             title="Sin cupo asignado"
@@ -91,55 +111,96 @@ export default async function SellerPage() {
         </div>
       ) : (
         <>
-          {/* Métricas reales del vendedor */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-            <StatCard
-              label="Cupo asignado"
-              value={allocation.allocated_quantity}
-              icon={<TicketIcon size={18} />}
-              accent="accent"
-            />
-            <StatCard
-              label="Vendidas"
-              value={sold}
-              icon={<DollarIcon size={18} />}
-              accent="green"
-              progress={allocation.allocated_quantity ? (sold / allocation.allocated_quantity) * 100 : 0}
-            />
-            <StatCard
-              label="Restantes"
-              value={Math.max(0, allocation.allocated_quantity - sold)}
-              icon={<TicketIcon size={18} />}
-              accent="yellow"
-              progress={
-                allocation.allocated_quantity
-                  ? (Math.max(0, allocation.allocated_quantity - sold) /
-                      allocation.allocated_quantity) *
-                    100
-                  : 0
-              }
-            />
-            <StatCard
-              label="Fase actual"
-              value={phase?.name ?? "—"}
-              icon={<LayersIcon size={18} />}
-              accent="neutral"
-            />
-            <StatCard
-              label="Precio actual"
-              value={phase ? formatCurrency(Number(phase.price)) : "—"}
-              icon={<GaugeIcon size={18} />}
-              accent="green"
-            />
-          </div>
+          {/* Métricas del vendedor */}
+          {allocation ? (
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+              <StatCard
+                label="Cupo asignado"
+                value={allocation.allocated_quantity}
+                icon={<TicketIcon size={18} />}
+                accent="accent"
+              />
+              <StatCard
+                label="Vendidas"
+                value={sold}
+                icon={<DollarIcon size={18} />}
+                accent="green"
+                progress={allocation.allocated_quantity ? (sold / allocation.allocated_quantity) * 100 : 0}
+              />
+              <StatCard
+                label="Restantes"
+                value={remaining ?? 0}
+                icon={<TicketIcon size={18} />}
+                accent="yellow"
+                progress={
+                  allocation.allocated_quantity
+                    ? ((remaining ?? 0) / allocation.allocated_quantity) * 100
+                    : 0
+                }
+              />
+              <StatCard
+                label="Fase actual"
+                value={currentPhase?.name ?? "—"}
+                icon={<LayersIcon size={18} />}
+                accent="neutral"
+              />
+              <StatCard
+                label="Precio actual"
+                value={sellablePhase ? formatCurrency(Number(sellablePhase.price)) : "—"}
+                icon={<GaugeIcon size={18} />}
+                accent="green"
+              />
+            </div>
+          ) : (
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+              <StatCard
+                label="Vendidas (admin)"
+                value={sold}
+                icon={<DollarIcon size={18} />}
+                accent="green"
+              />
+              <StatCard
+                label="Fase actual"
+                value={currentPhase?.name ?? "—"}
+                icon={<LayersIcon size={18} />}
+                accent="neutral"
+              />
+              <StatCard
+                label="Precio actual"
+                value={sellablePhase ? formatCurrency(Number(sellablePhase.price)) : "—"}
+                icon={<GaugeIcon size={18} />}
+                accent="green"
+              />
+            </div>
+          )}
 
-          {/* Formulario de venta (visual — la venta real llega en fase 3) */}
+          {/* Formulario de venta real */}
           <DashboardCard
             title="Vender entrada"
-            subtitle="Vista previa de la entrada. La generación real de QR y PDF llegará en la siguiente fase."
+            subtitle="Genera la entrada, el QR y el PDF, y envíalo automáticamente al correo del cliente."
             className="mt-6"
           >
-            <SellForm />
+            <SellTicketForm disabledReason={disabledReason} />
+          </DashboardCard>
+
+          {/* Ventas del vendedor */}
+          <DashboardCard
+            title="Mis ventas"
+            subtitle="Entradas que has generado. Descarga el PDF o reenvía el correo."
+            className="mt-6"
+            bodyClassName="p-0"
+          >
+            {tickets.length === 0 ? (
+              <div className="p-5">
+                <EmptyState
+                  title="Aún no has vendido entradas"
+                  description="Cuando generes tu primera entrada, aparecerá aquí."
+                  icon={<TicketIcon size={26} />}
+                />
+              </div>
+            ) : (
+              <TicketsTable tickets={tickets} />
+            )}
           </DashboardCard>
         </>
       )}

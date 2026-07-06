@@ -67,11 +67,3 @@ export async function requireRole(
   }
   return profile;
 }
-
-/** Cierra la sesión del usuario (Server Action). */
-export async function signOut(): Promise<void> {
-  "use server";
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect("/login");
-}

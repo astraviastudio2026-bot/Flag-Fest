@@ -107,6 +107,90 @@ export function pickCurrentPhase(phases: SalePhase[]): SalePhase | null {
   return upcoming[0] ?? active[0] ?? null;
 }
 
+/**
+ * Fase realmente vendible según la fecha actual: activa y con el rango
+ * `starts_at <= now <= ends_at`. A diferencia de `pickCurrentPhase`, NO
+ * cae a una fase próxima; devuelve null si no hay ninguna vigente ahora.
+ */
+export function pickSellablePhase(phases: SalePhase[]): SalePhase | null {
+  const now = Date.now();
+  return (
+    phases.find(
+      (p) =>
+        p.is_active &&
+        new Date(p.starts_at).getTime() <= now &&
+        new Date(p.ends_at).getTime() >= now,
+    ) ?? null
+  );
+}
+
+/** Fila de entrada enriquecida con nombre de vendedor y fase (para tablas). */
+export interface TicketRow extends Ticket {
+  seller_name: string | null;
+  phase_name: string | null;
+}
+
+async function decorateTickets(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tickets: Ticket[],
+): Promise<TicketRow[]> {
+  if (tickets.length === 0) return [];
+
+  const sellerIds = [...new Set(tickets.map((t) => t.seller_id))];
+  const phaseIds = [
+    ...new Set(tickets.map((t) => t.sale_phase_id).filter(Boolean)),
+  ] as string[];
+
+  const [{ data: sellers }, { data: phases }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name").in("id", sellerIds),
+    phaseIds.length
+      ? supabase.from("sale_phases").select("id, name").in("id", phaseIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ]);
+
+  const sellerById = new Map(
+    ((sellers ?? []) as Pick<Profile, "id" | "full_name">[]).map((s) => [
+      s.id,
+      s.full_name,
+    ]),
+  );
+  const phaseById = new Map(
+    ((phases ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]),
+  );
+
+  return tickets.map((t) => ({
+    ...t,
+    seller_name: sellerById.get(t.seller_id) ?? null,
+    phase_name: t.sale_phase_id ? phaseById.get(t.sale_phase_id) ?? null : null,
+  }));
+}
+
+/** Entradas de un vendedor en el evento, enriquecidas (más recientes primero). */
+export async function getSellerTickets(
+  eventId: string,
+  sellerId: string,
+): Promise<TicketRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tickets")
+    .select("*")
+    .eq("event_id", eventId)
+    .eq("seller_id", sellerId)
+    .order("sold_at", { ascending: false });
+  return decorateTickets(supabase, (data ?? []) as Ticket[]);
+}
+
+/** Todas las entradas del evento, enriquecidas (para el panel admin). */
+export async function getEventTickets(eventId: string): Promise<TicketRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tickets")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("sold_at", { ascending: false });
+  return decorateTickets(supabase, (data ?? []) as Ticket[]);
+}
+
 /** Usuarios gestionables por el admin (vendedores y validadores). */
 export async function getManageableUsers(): Promise<Profile[]> {
   const supabase = await createClient();
@@ -211,30 +295,41 @@ export async function getRecentTickets(
 export async function getSellerDashboard(sellerId: string) {
   const event = await getActiveEvent();
   if (!event) {
-    return { event: null as Event | null, allocation: null, sold: 0, phase: null };
+    return {
+      event: null as Event | null,
+      allocation: null,
+      sold: 0,
+      phase: null,
+      sellablePhase: null as SalePhase | null,
+      tickets: [] as TicketRow[],
+    };
   }
 
   const supabase = await createClient();
-  const [{ data: allocation }, { count: sold }, phases] = await Promise.all([
-    supabase
-      .from("seller_allocations")
-      .select("*")
-      .eq("event_id", event.id)
-      .eq("seller_id", sellerId)
-      .maybeSingle<SellerAllocation>(),
-    supabase
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", event.id)
-      .eq("seller_id", sellerId)
-      .neq("status", "cancelled"),
-    getPhases(event.id),
-  ]);
+  const [{ data: allocation }, { count: sold }, phases, tickets] =
+    await Promise.all([
+      supabase
+        .from("seller_allocations")
+        .select("*")
+        .eq("event_id", event.id)
+        .eq("seller_id", sellerId)
+        .maybeSingle<SellerAllocation>(),
+      supabase
+        .from("tickets")
+        .select("*", { count: "exact", head: true })
+        .eq("event_id", event.id)
+        .eq("seller_id", sellerId)
+        .neq("status", "cancelled"),
+      getPhases(event.id),
+      getSellerTickets(event.id, sellerId),
+    ]);
 
   return {
     event,
     allocation: allocation ?? null,
     sold: sold ?? 0,
     phase: pickCurrentPhase(phases),
+    sellablePhase: pickSellablePhase(phases),
+    tickets,
   };
 }
