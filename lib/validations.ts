@@ -56,21 +56,79 @@ export const createEventSchema = z.object({
 });
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 
+/**
+ * Ecuador (America/Guayaquil) usa UTC-5 todo el año, sin horario de verano.
+ * Construir los timestamps con este desfase fijo evita que el día
+ * seleccionado se corra al convertir a UTC.
+ */
+const ECUADOR_UTC_OFFSET = "-05:00";
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Extrae la parte `YYYY-MM-DD` de una fecha suelta o de un timestamp. */
+function extractDate(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const head = trimmed.slice(0, 10);
+  return DATE_ONLY.test(head) ? head : null;
+}
+
+/** `2026-07-07` → inicio del día en Ecuador, en ISO UTC. */
+export function phaseStartTimestamp(date: string): string {
+  return new Date(`${date}T00:00:00${ECUADOR_UTC_OFFSET}`).toISOString();
+}
+
+/** `2026-07-19` → fin del día en Ecuador, en ISO UTC. */
+export function phaseEndTimestamp(date: string): string {
+  return new Date(`${date}T23:59:59${ECUADOR_UTC_OFFSET}`).toISOString();
+}
+
 export const createPhaseSchema = z
   .object({
+    event_id: z.string().uuid("Evento no válido."),
     name: z.string().trim().min(2, "El nombre de la fase es obligatorio."),
     phase_order: z.coerce.number().int().min(1, "Orden no válido."),
-    starts_at: z.string().min(1, "Fecha de inicio obligatoria."),
-    ends_at: z.string().min(1, "Fecha de fin obligatoria."),
-    price: z.coerce.number().min(0, "El precio no puede ser negativo."),
+    // El formulario envía solo fechas (`YYYY-MM-DD`). Se aceptan tanto
+    // `start_date`/`end_date` como los alias `starts_at`/`ends_at`.
+    start_date: z.string().optional(),
+    end_date: z.string().optional(),
+    starts_at: z.string().optional(),
+    ends_at: z.string().optional(),
+    price: z.coerce.number().positive("El precio debe ser mayor que 0."),
+    is_active: z.coerce.boolean().optional().default(true),
   })
-  .refine(
-    (v) => new Date(v.ends_at).getTime() > new Date(v.starts_at).getTime(),
-    { message: "La fecha de fin debe ser posterior a la de inicio.", path: ["ends_at"] },
-  );
+  .transform((data, ctx) => {
+    const start = extractDate(data.start_date ?? data.starts_at);
+    const end = extractDate(data.end_date ?? data.ends_at);
+
+    if (!start) {
+      ctx.addIssue({ code: "custom", path: ["start_date"], message: "Fecha de inicio obligatoria." });
+    }
+    if (!end) {
+      ctx.addIssue({ code: "custom", path: ["end_date"], message: "Fecha de fin obligatoria." });
+    }
+    if (start && end && end < start) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["end_date"],
+        message: "La fecha de fin no puede ser anterior a la de inicio.",
+      });
+    }
+    if (!start || !end) return z.NEVER;
+
+    return {
+      event_id: data.event_id,
+      name: data.name,
+      phase_order: data.phase_order,
+      price: data.price,
+      is_active: data.is_active,
+      starts_at: phaseStartTimestamp(start),
+      ends_at: phaseEndTimestamp(end),
+    };
+  });
 export type CreatePhaseInput = z.infer<typeof createPhaseSchema>;
 
 export const allocationSchema = z.object({
+  event_id: z.string().uuid("Evento no válido."),
   seller_id: z.string().uuid("Vendedor no válido."),
   allocated_quantity: z.coerce
     .number()

@@ -27,7 +27,7 @@ import {
   getSellers,
   pickCurrentPhase,
 } from "@/lib/data";
-import { formatCurrency, getFlagColor } from "@/lib/event";
+import { formatCurrency, formatDate, getFlagColor } from "@/lib/event";
 import type { TicketStatus, TicketColor } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -168,6 +168,7 @@ export default async function AdminPage() {
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-2">
                     <th className="px-4 py-3 font-condensed font-medium">#</th>
                     <th className="px-4 py-3 font-condensed font-medium">Fase</th>
+                    <th className="px-4 py-3 font-condensed font-medium">Vigencia</th>
                     <th className="px-4 py-3 font-condensed font-medium">Precio</th>
                     <th className="px-4 py-3 font-condensed font-medium">Estado</th>
                   </tr>
@@ -181,6 +182,9 @@ export default async function AdminPage() {
                         {currentPhase?.id === p.id && (
                           <span className="ml-2 text-xs text-accent-glow">· vigente</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-2 whitespace-nowrap">
+                        {formatDate(p.starts_at)} – {formatDate(p.ends_at)}
                       </td>
                       <td className="px-4 py-3 text-foreground">{formatCurrency(Number(p.price))}</td>
                       <td className="px-4 py-3">

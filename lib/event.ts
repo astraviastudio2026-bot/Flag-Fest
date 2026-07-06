@@ -90,3 +90,13 @@ export function formatCurrency(amount: number): string {
     currency: EVENT.currency,
   }).format(amount);
 }
+
+/** Formatea un timestamp ISO como `dd/mm/yyyy` en la zona de Ecuador. */
+export function formatDate(iso: string): string {
+  return new Intl.DateTimeFormat("es-EC", {
+    timeZone: "America/Guayaquil",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(iso));
+}
