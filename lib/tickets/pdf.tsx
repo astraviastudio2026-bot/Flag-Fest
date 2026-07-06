@@ -16,9 +16,10 @@ import type { TicketColor } from "@/lib/types";
 /**
  * Generación del PDF de la entrada con @react-pdf/renderer (server-side).
  *
- * Talón horizontal con estética Flag Fest: fondo oscuro, acento neón
- * según el color elegido, logo/texto FLAGS FEST, QR a la derecha y las
- * leyendas obligatorias. Inspirado en /public/branding/formato-entrada.png.
+ * Hoja A4 horizontal con la entrada centrada: talón izquierdo, área
+ * central con los datos y panel derecho con el QR. Fondo oscuro y borde
+ * neón según el color elegido. Layout 100% flexbox (sin posiciones
+ * absolutas) para que nada se monte ni se corte.
  *
  * Tipografías de marca (Anton para los display, Oswald para el resto),
  * las mismas que usa la app. Se registran como Data URI para no depender
@@ -92,39 +93,81 @@ const COLOR_SPECS: Record<TicketColor, ColorSpec> = {
   },
 };
 
-const BG = "#06060a";
-const PANEL = "#0c0c12";
+// ------------------------------------------------------------------
+// Medidas fijas (pt). 1 mm = 2.83465 pt.
+// A4 horizontal: 841.89 × 595.28 pt (297 × 210 mm).
+// ------------------------------------------------------------------
+const MM = 2.83465;
+const TICKET_W = 260 * MM; // ≈ 737 pt
+const TICKET_H = 95 * MM; // ≈ 269 pt
+const STUB_W = 30 * MM; // ≈ 85 pt
+const QR_PANEL_W = 60 * MM; // ≈ 170 pt
+const QR_SIZE = 40 * MM; // ≈ 113 pt (dentro del rango 38–45 mm)
+
+const BG = "#050508";
+const TICKET_BG = "#0a0a10";
+const PANEL = "#0e0e15";
 const MUTED = "#8b8b99";
 const WHITE = "#ffffff";
+
+/**
+ * Mezcla el acento con el fondo del ticket y devuelve un hex SÓLIDO.
+ * react-pdf renderiza mal los colores con alfa en bordes (sobre todo
+ * en los punteados), así que pre-calculamos el color ya compuesto.
+ */
+function tintAlpha(hex: string, alpha: number): string {
+  const bg = [10, 10, 16]; // TICKET_BG #0a0a10
+  const mix = (i: number) => {
+    const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+    return Math.round(c * alpha + bg[i] * (1 - alpha));
+  };
+  const to2 = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${to2(mix(0))}${to2(mix(1))}${to2(mix(2))}`;
+}
+
+/** Tamaño de fuente del nombre según su longitud (máx. 2 líneas). */
+function nameFontSize(name: string): number {
+  const n = name.length;
+  if (n <= 22) return 16;
+  if (n <= 34) return 14;
+  if (n <= 46) return 12;
+  return 11;
+}
 
 const styles = StyleSheet.create({
   page: {
     backgroundColor: BG,
-    padding: 24,
     fontFamily: "Oswald",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12 * MM,
   },
   ticket: {
-    flexGrow: 1,
+    width: TICKET_W,
+    height: TICKET_H,
+    backgroundColor: TICKET_BG,
     borderWidth: 2,
     borderRadius: 14,
     overflow: "hidden",
+    flexDirection: "column",
   },
   topRow: {
+    flex: 1,
     flexDirection: "row",
-    flexGrow: 1,
   },
   // Talón izquierdo
   stub: {
-    width: 96,
+    width: STUB_W,
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 22,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
     borderRightWidth: 1,
     borderRightStyle: "dashed",
   },
   stubBrand: {
     fontFamily: "Anton",
-    fontSize: 17,
+    fontSize: 15,
     color: WHITE,
     textAlign: "center",
     letterSpacing: 1,
@@ -132,150 +175,166 @@ const styles = StyleSheet.create({
   stubFest: {
     fontFamily: "Oswald",
     fontWeight: 700,
-    fontSize: 9,
+    fontSize: 8,
     color: WHITE,
     letterSpacing: 4,
-    marginTop: 3,
+    marginTop: 2,
+    textAlign: "center",
   },
   stubNumber: {
     fontFamily: "Oswald",
     fontWeight: 700,
-    fontSize: 10,
+    fontSize: 9,
     color: WHITE,
-    opacity: 0.75,
+    opacity: 0.85,
+    textAlign: "center",
   },
-  stubLabel: {
-    fontSize: 6,
+  stubCode: {
+    fontSize: 6.5,
     color: MUTED,
     letterSpacing: 1,
     marginTop: 2,
+    textAlign: "center",
   },
   // Centro
   center: {
-    flexGrow: 1,
-    paddingHorizontal: 22,
-    paddingVertical: 20,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     justifyContent: "space-between",
   },
   brandRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
     justifyContent: "space-between",
   },
   brand: {
     fontFamily: "Anton",
-    fontSize: 38,
+    fontSize: 30,
     color: WHITE,
     letterSpacing: 1,
   },
   brandSub: {
-    fontSize: 8,
+    fontSize: 7,
     color: MUTED,
-    letterSpacing: 1,
-    marginTop: 4,
+    letterSpacing: 1.5,
+    marginTop: 3,
   },
   colorBlock: {
     alignItems: "flex-end",
+    maxWidth: 170,
   },
   colorLabel: {
     fontFamily: "Anton",
-    fontSize: 26,
+    fontSize: 20,
     letterSpacing: 1,
   },
   colorMessage: {
     fontFamily: "Oswald",
     fontWeight: 400,
-    fontSize: 15,
-    marginTop: 2,
+    fontSize: 13,
+    marginTop: 1,
   },
   colorDesc: {
-    fontSize: 8,
+    fontSize: 7,
     color: MUTED,
-    marginTop: 3,
+    marginTop: 2,
     textAlign: "right",
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#ffffff22",
-    marginVertical: 12,
+  nameBlock: {
+    marginTop: 4,
   },
-  detailsGrid: {
+  nameLabel: {
+    fontSize: 6.5,
+    color: MUTED,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  nameValue: {
+    color: WHITE,
+    fontFamily: "Oswald",
+    fontWeight: 700,
+    marginTop: 2,
+    maxLines: 2,
+    textOverflow: "ellipsis",
+  },
+  detailsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    marginTop: 4,
   },
   detailItem: {
-    width: "33.33%",
-    marginBottom: 8,
-    paddingRight: 8,
+    flex: 1,
+    paddingRight: 6,
   },
   detailLabel: {
-    fontSize: 6,
+    fontSize: 6.5,
     color: MUTED,
     letterSpacing: 1,
     textTransform: "uppercase",
   },
   detailValue: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: WHITE,
     fontFamily: "Oswald",
     fontWeight: 700,
     marginTop: 2,
+    maxLines: 1,
+    textOverflow: "ellipsis",
   },
   slogan: {
     fontSize: 8,
     fontFamily: "Oswald",
     fontWeight: 700,
-    letterSpacing: 1,
-    marginTop: 6,
+    letterSpacing: 1.5,
+    marginTop: 4,
   },
   // Derecha (QR)
   qrPanel: {
-    width: 190,
+    width: QR_PANEL_W,
     backgroundColor: PANEL,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderLeftWidth: 1,
     borderLeftStyle: "dashed",
   },
   qrBox: {
     backgroundColor: WHITE,
-    padding: 8,
-    borderRadius: 8,
+    padding: 6,
+    borderRadius: 6,
   },
   qrImage: {
-    width: 118,
-    height: 118,
+    width: QR_SIZE,
+    height: QR_SIZE,
   },
   paradox: {
     fontFamily: "Oswald",
     fontWeight: 700,
-    fontSize: 13,
-    letterSpacing: 6,
-    marginTop: 12,
+    fontSize: 11,
+    letterSpacing: 4,
+    marginTop: 8,
     textAlign: "center",
   },
   qrLegend: {
     fontSize: 6,
     color: WHITE,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 5,
     letterSpacing: 0.5,
   },
   qrLegendMuted: {
     fontSize: 5.5,
     color: MUTED,
     textAlign: "center",
-    marginTop: 3,
+    marginTop: 2,
   },
   // Pie legal
   legalBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 22,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 6,
     borderTopWidth: 1,
     borderTopStyle: "solid",
   },
@@ -287,9 +346,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   legalMuted: {
-    fontSize: 6,
+    fontSize: 7,
     color: MUTED,
     letterSpacing: 0.5,
+  },
+  // Marca discreta bajo la entrada, dentro de la hoja A4.
+  pageMark: {
+    marginTop: 14,
+    fontSize: 6.5,
+    color: MUTED,
+    letterSpacing: 2,
   },
 });
 
@@ -311,18 +377,23 @@ function TicketDocument({ data }: { data: TicketPdfData }) {
       title={`Entrada ${data.shortCode} · ${data.eventName}`}
       author="Flag Fest"
     >
-      <Page size={[820, 360]} orientation="landscape" style={styles.page}>
-        <View style={[styles.ticket, { borderColor: `${tint}` }]}>
+      <Page size="A4" orientation="landscape" style={styles.page}>
+        <View style={[styles.ticket, { borderColor: tint }]}>
           <View style={styles.topRow}>
             {/* Talón izquierdo */}
-            <View style={[styles.stub, { backgroundColor: `${tint}22`, borderRightColor: `${tint}66` }]}>
+            <View
+              style={[
+                styles.stub,
+                { backgroundColor: tintAlpha(tint, 0.13), borderRightColor: tintAlpha(tint, 0.4) },
+              ]}
+            >
               <View style={{ alignItems: "center" }}>
                 <Text style={styles.stubBrand}>FLAGS</Text>
                 <Text style={styles.stubFest}>FEST</Text>
               </View>
               <View style={{ alignItems: "center" }}>
                 <Text style={styles.stubNumber}>N.º {data.ticketNumber}</Text>
-                <Text style={styles.stubLabel}>{data.shortCode}</Text>
+                <Text style={styles.stubCode}>{data.shortCode}</Text>
               </View>
             </View>
 
@@ -346,10 +417,19 @@ function TicketDocument({ data }: { data: TicketPdfData }) {
                 </View>
               </View>
 
-              <View style={styles.divider} />
+              <View style={styles.nameBlock}>
+                <Text style={styles.nameLabel}>Asistente</Text>
+                <Text
+                  style={[
+                    styles.nameValue,
+                    { fontSize: nameFontSize(data.customerName) },
+                  ]}
+                >
+                  {data.customerName}
+                </Text>
+              </View>
 
-              <View style={styles.detailsGrid}>
-                <Detail label="Asistente" value={data.customerName} />
+              <View style={styles.detailsRow}>
                 <Detail label="Evento" value={data.eventName} />
                 <Detail label="Lugar" value={data.location || "—"} />
                 <Detail label="Fecha" value={data.eventDate} />
@@ -363,7 +443,7 @@ function TicketDocument({ data }: { data: TicketPdfData }) {
             </View>
 
             {/* Derecha: QR */}
-            <View style={[styles.qrPanel, { borderLeftColor: `${tint}66` }]}>
+            <View style={[styles.qrPanel, { borderLeftColor: tintAlpha(tint, 0.4) }]}>
               <View style={styles.qrBox}>
                 {/* eslint-disable-next-line jsx-a11y/alt-text */}
                 <Image style={styles.qrImage} src={data.qrDataUrl} />
@@ -379,7 +459,12 @@ function TicketDocument({ data }: { data: TicketPdfData }) {
           </View>
 
           {/* Pie legal */}
-          <View style={[styles.legalBar, { borderTopColor: `${tint}66`, backgroundColor: `${tint}14` }]}>
+          <View
+            style={[
+              styles.legalBar,
+              { borderTopColor: tintAlpha(tint, 0.4), backgroundColor: tintAlpha(tint, 0.08) },
+            ]}
+          >
             <Text style={styles.legalStrong}>
               ENTRADA ÚNICA E INTRANSFERIBLE
             </Text>
@@ -388,6 +473,10 @@ function TicketDocument({ data }: { data: TicketPdfData }) {
             </Text>
           </View>
         </View>
+
+        <Text style={styles.pageMark}>
+          FLAGS FEST · GREEN FLAGS & RED FLAGS PARTY
+        </Text>
       </Page>
     </Document>
   );
