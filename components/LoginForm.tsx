@@ -15,7 +15,7 @@ export function LoginForm() {
     <form action={formAction} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
         <span className="font-condensed text-xs uppercase tracking-wider text-muted">
-          Correo electrónico
+          Usuario o correo interno
         </span>
         <div className="relative">
           <MailIcon
@@ -23,14 +23,19 @@ export function LoginForm() {
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-2"
           />
           <input
-            type="email"
-            name="email"
+            type="text"
+            name="identifier"
             required
-            autoComplete="email"
-            placeholder="tu@correo.com"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="admin"
             className="h-12 w-full rounded-xl border border-border bg-surface-2 pl-11 pr-4 text-sm text-foreground placeholder:text-muted-2 outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/25"
           />
         </div>
+        <span className="text-xs text-muted-2">
+          Ejemplo: admin@flagfest.local
+        </span>
       </label>
 
       <label className="flex flex-col gap-1.5">

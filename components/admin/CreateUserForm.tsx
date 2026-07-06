@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ActionButton } from "@/components/ActionButton";
 import { UsersIcon } from "@/components/icons";
+import { normalizeInternalEmail } from "@/lib/internal-users";
 import { FormMessage, fieldInput, fieldLabel } from "./FormMessage";
 
 /**
@@ -14,9 +15,14 @@ import { FormMessage, fieldInput, fieldLabel } from "./FormMessage";
 export function CreateUserForm() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [username, setUsername] = useState("");
   const [result, setResult] = useState<{ ok?: boolean; error?: string | null; message?: string }>(
     {},
   );
+
+  const emailPreview = username.trim()
+    ? normalizeInternalEmail(username)
+    : null;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -27,7 +33,7 @@ export function CreateUserForm() {
     const fd = new FormData(form);
     const payload = {
       full_name: String(fd.get("full_name") ?? ""),
-      email: String(fd.get("email") ?? ""),
+      username: String(fd.get("username") ?? ""),
       password: String(fd.get("password") ?? ""),
       role: String(fd.get("role") ?? "seller"),
     };
@@ -43,8 +49,12 @@ export function CreateUserForm() {
       if (!res.ok) {
         setResult({ error: data.error ?? "No se pudo crear el usuario." });
       } else {
-        setResult({ ok: true, message: `Usuario ${data.user.email} creado.` });
+        setResult({
+          ok: true,
+          message: `Usuario ${data.user.username ?? data.user.email} creado.`,
+        });
         form.reset();
+        setUsername("");
         router.refresh();
       }
     } catch {
@@ -67,14 +77,24 @@ export function CreateUserForm() {
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className={fieldLabel}>Correo electrónico</span>
+          <span className={fieldLabel}>Usuario interno</span>
           <input
-            type="email"
-            name="email"
+            type="text"
+            name="username"
             required
-            placeholder="vendedor@correo.com"
+            minLength={3}
+            autoCapitalize="none"
+            spellCheck={false}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="vendedor1"
             className={fieldInput}
           />
+          <span className="text-xs text-muted-2">
+            {emailPreview
+              ? `Se creará como ${emailPreview}`
+              : "Se creará como vendedor1@flagfest.local"}
+          </span>
         </label>
       </div>
 
@@ -95,6 +115,7 @@ export function CreateUserForm() {
           <select name="role" required defaultValue="seller" className={fieldInput}>
             <option value="seller">Vendedor</option>
             <option value="validator">Validador</option>
+            <option value="admin">Administrador</option>
           </select>
         </label>
       </div>

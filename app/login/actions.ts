@@ -4,10 +4,12 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { roleHome } from "@/lib/permissions";
+import { normalizeInternalEmail } from "@/lib/internal-users";
 import type { UserRole } from "@/lib/types";
 
 const loginSchema = z.object({
-  email: z.string().trim().email(),
+  // Puede ser un usuario interno ("admin") o un correo interno completo.
+  identifier: z.string().trim().min(1),
   password: z.string().min(1),
 });
 
@@ -20,16 +22,20 @@ export async function login(
   formData: FormData,
 ): Promise<LoginState> {
   const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
+    identifier: formData.get("identifier"),
     password: formData.get("password"),
   });
 
   if (!parsed.success) {
-    return { error: "Introduce un correo y una contraseña válidos." };
+    return { error: "Introduce un usuario y una contraseña válidos." };
   }
 
+  const email = normalizeInternalEmail(parsed.data.identifier);
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password: parsed.data.password,
+  });
 
   if (error || !data.user) {
     return {

@@ -1,15 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema } from "@/lib/validations";
+import {
+  internalUsernameFromEmail,
+  normalizeInternalEmail,
+} from "@/lib/internal-users";
 import type { Profile } from "@/lib/types";
 
 /**
  * POST /api/admin/users/create
  *
- * Crea un usuario (vendedor o validador) en Supabase Auth usando la
- * clave service_role — SOLO en el servidor. Verifica que quien llama
- * sea un admin activo, crea el perfil y registra un audit log.
+ * Crea un usuario interno (admin, seller o validator) en Supabase Auth
+ * usando la clave service_role — SOLO en el servidor. Acepta un usuario
+ * interno ("vendedor1") o un correo interno completo y lo normaliza a
+ * un email `@flagfest.local`. Verifica que quien llama sea un admin
+ * activo, crea el perfil (con username) y registra un audit log.
+ * No se envían correos de confirmación (email_confirm: true).
  */
 export async function POST(request: NextRequest) {
   // 1. Verificar que el solicitante sea admin activo.
@@ -48,16 +56,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { full_name, email, password, role } = parsed.data;
+  const { full_name, username: rawUsername, password, role } = parsed.data;
+
+  // Normalizar el usuario interno a un correo válido (@flagfest.local).
+  const email = normalizeInternalEmail(rawUsername);
+  if (!z.string().email().safeParse(email).success) {
+    return NextResponse.json(
+      { error: "Usuario interno no válido." },
+      { status: 422 },
+    );
+  }
+  const username = internalUsernameFromEmail(email);
 
   // 3. Crear el usuario con el cliente admin (service role).
+  // email_confirm: true => cuenta confirmada, sin correo de confirmación.
   const admin = createAdminClient();
   const { data: created, error: createError } =
     await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name, role },
+      user_metadata: { full_name, username, role },
     });
 
   if (createError || !created.user) {
@@ -72,6 +91,7 @@ export async function POST(request: NextRequest) {
       id: created.user.id,
       full_name,
       email,
+      username,
       role,
       is_active: true,
     },
@@ -93,11 +113,14 @@ export async function POST(request: NextRequest) {
     action: "user.create",
     entity_type: "profile",
     entity_id: created.user.id,
-    metadata: { email, role },
+    metadata: { email, username, role },
   });
 
   return NextResponse.json(
-    { ok: true, user: { id: created.user.id, email, role, full_name } },
+    {
+      ok: true,
+      user: { id: created.user.id, email, username, role, full_name },
+    },
     { status: 201 },
   );
 }

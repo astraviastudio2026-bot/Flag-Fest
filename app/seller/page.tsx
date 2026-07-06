@@ -41,6 +41,11 @@ export default async function SellerPage() {
             {profile.is_active ? "Cuenta activa" : "Cuenta inactiva"}
           </StatusBadge>
         }
+        user={{
+          full_name: profile.full_name,
+          username: profile.username,
+          role: profile.role,
+        }}
       />
 
       {/* Perfil del vendedor */}
@@ -51,7 +56,9 @@ export default async function SellerPage() {
           </span>
           <div>
             <p className="font-medium text-foreground">{profile.full_name}</p>
-            <p className="text-xs text-muted-2">{profile.email}</p>
+            <p className="text-xs text-muted-2">
+              {profile.username ? `@${profile.username}` : profile.email}
+            </p>
           </div>
         </div>
         <div>

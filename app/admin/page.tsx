@@ -44,7 +44,12 @@ const STATUS_BADGE: Record<TicketStatus, { badge: BadgeStatus; label: string }> 
 };
 
 export default async function AdminPage() {
-  await requireRole(["admin"]);
+  const profile = await requireRole(["admin"]);
+  const headerUser = {
+    full_name: profile.full_name,
+    username: profile.username,
+    role: profile.role,
+  };
   const event = await getActiveEvent();
 
   // Sin evento activo: empty state elegante + formulario para crearlo.
@@ -52,7 +57,11 @@ export default async function AdminPage() {
     const users = await getManageableUsers();
     return (
       <AppShell role="admin">
-        <Header title="Panel" subtitle="Flags Fest · Green Flags & Red Flags Party" />
+        <Header
+          title="Panel"
+          subtitle="Flags Fest · Green Flags & Red Flags Party"
+          user={headerUser}
+        />
 
         <div className="mt-6">
           <EmptyState
@@ -105,6 +114,7 @@ export default async function AdminPage() {
             {currentPhase ? `Fase: ${currentPhase.name}` : "Sin fase vigente"}
           </StatusBadge>
         }
+        user={headerUser}
       />
 
       {/* Métricas reales */}

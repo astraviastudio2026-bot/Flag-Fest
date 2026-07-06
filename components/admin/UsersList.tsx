@@ -38,7 +38,9 @@ export function UsersList({ users }: { users: Profile[] }) {
             >
               <td className="px-4 py-3">
                 <p className="font-medium text-foreground">{u.full_name}</p>
-                <p className="text-xs text-muted-2">{u.email}</p>
+                <p className="text-xs text-muted-2">
+                  {u.username ? `@${u.username}` : u.email}
+                </p>
               </td>
               <td className="px-4 py-3 text-muted">{ROLE_LABELS[u.role]}</td>
               <td className="px-4 py-3">

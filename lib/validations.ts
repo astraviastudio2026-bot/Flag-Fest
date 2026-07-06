@@ -11,16 +11,18 @@ export const createUserSchema = z.object({
     .trim()
     .min(3, "El nombre debe tener al menos 3 caracteres.")
     .max(120, "El nombre es demasiado largo."),
-  email: z
+  // Usuario interno: puede ser un identificador simple ("vendedor1") o
+  // un correo interno completo. Se normaliza en el servidor.
+  username: z
     .string()
     .trim()
-    .toLowerCase()
-    .email("Correo electrónico no válido."),
+    .min(3, "El usuario interno debe tener al menos 3 caracteres.")
+    .max(120, "El usuario interno es demasiado largo."),
   password: z
     .string()
     .min(8, "La contraseña temporal debe tener al menos 8 caracteres.")
     .max(72, "La contraseña es demasiado larga."),
-  role: z.enum(["seller", "validator"], {
+  role: z.enum(["admin", "seller", "validator"], {
     message: "Rol no válido.",
   }),
 });
